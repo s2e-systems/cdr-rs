@@ -171,14 +171,14 @@ where
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        Err(Error::TypeNotSupported)
+        Ok(())
     }
 
-    fn serialize_some<T: ?Sized>(self, _v: &T) -> Result<Self::Ok>
+    fn serialize_some<T: ?Sized>(self, v: &T) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        Err(Error::TypeNotSupported)
+        v.serialize(self)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok> {
@@ -208,14 +208,13 @@ where
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        self.serialize_u32(variant_index)?;
         value.serialize(self)
     }
 
