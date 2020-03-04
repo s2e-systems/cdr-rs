@@ -1,86 +1,86 @@
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
+// use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-pub const ENCAPSULATION_HEADER_SIZE: u64 = 4;
+// pub const ENCAPSULATION_HEADER_SIZE: u64 = 4;
 
-/// Data encapsulation scheme identifiers.
-pub trait Encapsulation {
-    type E: ByteOrder;
+// /// Data encapsulation scheme identifiers.
+// pub trait Encapsulation {
+//     type E: ByteOrder;
 
-    fn id() -> [u8; 2];
-    fn option() -> [u8; 2] {
-        [0; 2]
-    }
-}
+//     fn id() -> [u8; 2];
+//     fn option() -> [u8; 2] {
+//         [0; 2]
+//     }
+// }
 
-/// OMG CDR big-endian encapsulation.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum CdrBe {}
+// /// OMG CDR big-endian encapsulation.
+// #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+// pub enum CdrBe {}
 
-impl Encapsulation for CdrBe {
-    type E = BigEndian;
+// impl Encapsulation for CdrBe {
+//     type E = BigEndian;
 
-    fn id() -> [u8; 2] {
-        [0, 0]
-    }
-}
+//     fn id() -> [u8; 2] {
+//         [0, 0]
+//     }
+// }
 
-/// OMG CDR little-endian encapsulation.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum CdrLe {}
+// /// OMG CDR little-endian encapsulation.
+// #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+// pub enum CdrLe {}
 
-impl Encapsulation for CdrLe {
-    type E = LittleEndian;
+// impl Encapsulation for CdrLe {
+//     type E = LittleEndian;
 
-    fn id() -> [u8; 2] {
-        [0, 1]
-    }
-}
+//     fn id() -> [u8; 2] {
+//         [0, 1]
+//     }
+// }
 
-/// ParameterList encapsulated using OMG CDR big-endian encapsulation.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum PlCdrBe {}
+// /// ParameterList encapsulated using OMG CDR big-endian encapsulation.
+// #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+// pub enum PlCdrBe {}
 
-impl Encapsulation for PlCdrBe {
-    type E = BigEndian;
+// impl Encapsulation for PlCdrBe {
+//     type E = BigEndian;
 
-    fn id() -> [u8; 2] {
-        [0, 2]
-    }
-}
+//     fn id() -> [u8; 2] {
+//         [0, 2]
+//     }
+// }
 
-/// ParameterList encapsulated using OMG CDR little-endian encapsulation.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum PlCdrLe {}
+// /// ParameterList encapsulated using OMG CDR little-endian encapsulation.
+// #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+// pub enum PlCdrLe {}
 
-impl Encapsulation for PlCdrLe {
-    type E = LittleEndian;
+// impl Encapsulation for PlCdrLe {
+//     type E = LittleEndian;
 
-    fn id() -> [u8; 2] {
-        [0, 3]
-    }
-}
+//     fn id() -> [u8; 2] {
+//         [0, 3]
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn test_constant() {
-        assert_eq!(
-            ENCAPSULATION_HEADER_SIZE,
-            (CdrBe::id().len() + CdrBe::option().len()) as u64
-        );
-        assert_eq!(
-            ENCAPSULATION_HEADER_SIZE,
-            (CdrLe::id().len() + CdrLe::option().len()) as u64
-        );
-        assert_eq!(
-            ENCAPSULATION_HEADER_SIZE,
-            (PlCdrBe::id().len() + PlCdrBe::option().len()) as u64
-        );
-        assert_eq!(
-            ENCAPSULATION_HEADER_SIZE,
-            (PlCdrLe::id().len() + PlCdrLe::option().len()) as u64
-        );
-    }
-}
+//     #[test]
+//     fn test_constant() {
+//         assert_eq!(
+//             ENCAPSULATION_HEADER_SIZE,
+//             (CdrBe::id().len() + CdrBe::option().len()) as u64
+//         );
+//         assert_eq!(
+//             ENCAPSULATION_HEADER_SIZE,
+//             (CdrLe::id().len() + CdrLe::option().len()) as u64
+//         );
+//         assert_eq!(
+//             ENCAPSULATION_HEADER_SIZE,
+//             (PlCdrBe::id().len() + PlCdrBe::option().len()) as u64
+//         );
+//         assert_eq!(
+//             ENCAPSULATION_HEADER_SIZE,
+//             (PlCdrLe::id().len() + PlCdrLe::option().len()) as u64
+//         );
+//     }
+// }
