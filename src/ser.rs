@@ -7,7 +7,7 @@ use crate::size::{
     calc_serialized_data_size, calc_serialized_data_size_bounded, Infinite, SizeLimit,
 };
 
-use crate::{Endianness, RepresentationFormat, ENDIANNESS_BIT_MASK};
+use crate::{Endianness, RepresentationFormat};
 
 /// A serializer that writes values into a buffer.
 pub struct Serializer<W> {
@@ -20,18 +20,18 @@ impl<W> Serializer<W>
 where
     W: Write,
 {
-    pub fn new(writer: W, representation_format: RepresentationFormat) -> Self {
-        let endianness = match representation_format as u16 & ENDIANNESS_BIT_MASK {
-            0 => Endianness::BigEndian,
-            1 => Endianness::LittleEndian,
-            _ => panic!("Invalid endianness bit masking"),
-        };
+    pub fn new(writer: W, representation_format: &RepresentationFormat) -> Self {
+        let endianness = representation_format.endianness();
 
         Self {
             writer,
             pos: 0,
             endianness,
         }
+    }
+
+    pub fn set_representation_format(&mut self, representation_format: &RepresentationFormat) {
+        self.endianness = representation_format.endianness();
     }
 
     fn add_pos(&mut self, size: usize) {
@@ -78,14 +78,6 @@ where
         }
 
         ser::Serializer::serialize_u32(self, v as u32)
-    }
-
-    fn write_usize_as_u16(&mut self, size: usize) -> Result<()> {
-        if size > std::u16::MAX as usize {
-            return Err(Error::NumberOutOfRange);
-        }
-
-        ser::Serializer::serialize_u16(self, size as u16)
     }
 }
 
@@ -228,7 +220,7 @@ where
         Err(Error::TypeNotSupported)
     }
 
-    fn serialize_some<T: ?Sized>(self, v: &T) -> Result<Self::Ok>
+    fn serialize_some<T: ?Sized>(self, _v: &T) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
@@ -530,7 +522,7 @@ where
         calc_serialized_data_size_bounded(value, limit)?;
     }
 
-    let mut serializer = Serializer::new(writer, representation_format);
+    let mut serializer = Serializer::new(writer, &representation_format);
     ser::Serialize::serialize(value, &mut serializer)
 }
 

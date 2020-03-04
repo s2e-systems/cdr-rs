@@ -7,7 +7,7 @@ use serde::de::{self, IntoDeserializer};
 use crate::error::{Error, Result};
 use crate::size::{Infinite, SizeLimit};
 
-use crate::{Endianness, RepresentationFormat, ENDIANNESS_BIT_MASK};
+use crate::{Endianness, RepresentationFormat};
 
 /// A deserializer that reads bytes from a buffer.
 pub struct Deserializer<R, S> {
@@ -22,12 +22,8 @@ where
     R: Read,
     S: SizeLimit,
 {
-    pub fn new(reader: R, representation_format: RepresentationFormat, size_limit: S) -> Self {
-        let endianness = match representation_format as u16 & ENDIANNESS_BIT_MASK {
-            0 => Endianness::BigEndian,
-            1 => Endianness::LittleEndian,
-            _ => panic!("Invalid endianness bit masking"),
-        };
+    pub fn new(reader: R, representation_format: &RepresentationFormat, size_limit: S) -> Self {
+        let endianness = representation_format.endianness();
 
         Self {
             reader,
@@ -35,6 +31,10 @@ where
             pos: 0,
             endianness,
         }
+    }
+
+    pub fn set_representation_format(&mut self, representation_format: &RepresentationFormat) {
+        self.endianness = representation_format.endianness();
     }
 
     fn read_padding_of<T>(&mut self) -> Result<()> {
@@ -555,7 +555,7 @@ where
     T: de::Deserialize<'de>,
     S: SizeLimit,
 {
-    let mut deserializer = Deserializer::new(reader, representation_format, size_limit);
+    let mut deserializer = Deserializer::new(reader, &representation_format, size_limit);
     de::Deserialize::deserialize(&mut deserializer)
 }
 

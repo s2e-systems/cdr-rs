@@ -27,9 +27,10 @@
 //! }
 //! ```
 
+use std::convert::TryFrom;
 pub mod de;
 #[doc(inline)]
-// pub use crate::de::Deserializer;
+pub use crate::de::Deserializer;
 
 mod encapsulation;
 // pub use crate::encapsulation::{CdrBe, CdrLe, Encapsulation, PlCdrBe, PlCdrLe};
@@ -47,6 +48,8 @@ pub use crate::size::{Bounded, Infinite, SizeLimit};
 
 use std::io::{Read, Write};
 
+const ENCAPSULATION_HEADER_SIZE: usize = 4;
+
 pub enum RepresentationFormat {
     CdrBe = 0x0000,
     CdrLe = 0x0001,
@@ -54,12 +57,47 @@ pub enum RepresentationFormat {
     PlCdrLe = 0x0003,
 }
 
+impl RepresentationFormat {
+    fn id(&self) -> u16{
+        match self {
+            &RepresentationFormat::CdrBe => 0x0000,
+            &RepresentationFormat::CdrLe => 0x0001,
+            &RepresentationFormat::PlCdrBe => 0x0002,
+            &RepresentationFormat::PlCdrLe => 0x0003,
+        }
+    }
+
+    fn option(&self) -> u16 {
+        0x0000
+    }
+
+    fn endianness(&self) -> Endianness {
+        match self {
+            &RepresentationFormat::CdrBe | &RepresentationFormat::PlCdrBe => Endianness::BigEndian,
+            &RepresentationFormat::CdrLe | &RepresentationFormat::PlCdrLe => Endianness::LittleEndian,
+        }
+    }
+}
+
+impl TryFrom<[u8;4]> for RepresentationFormat {
+    type Error = Error;
+
+    fn try_from(value: [u8;4]) -> std::result::Result<Self, Self::Error> {
+        let representation_value = u16::from_be_bytes([value[0], value[1]]);
+        match representation_value {
+            0x0000 => Ok(RepresentationFormat::CdrBe),
+            0x0001 => Ok(RepresentationFormat::CdrLe),
+            0x0002 => Ok(RepresentationFormat::PlCdrBe),
+            0x0003 => Ok(RepresentationFormat::PlCdrLe),
+            _ => Err(Error::InvalidEncapsulation),
+        }
+    }
+}
+
 enum Endianness {
     BigEndian,
     LittleEndian,
 }
-
-const ENDIANNESS_BIT_MASK : u16 = 0x0001;
 
 /// Returns the size that an object would be if serialized with a encapsulation.
 pub fn calc_serialized_size<T: ?Sized>(value: &T) -> usize
@@ -75,18 +113,16 @@ pub fn calc_serialized_size_bounded<T: ?Sized>(value: &T, max: usize) -> Result<
 where
     T: serde::Serialize,
 {
-    // use crate::encapsulation::ENCAPSULATION_HEADER_SIZE;
-
-    // if max < ENCAPSULATION_HEADER_SIZE {
-    //     Err(Error::SizeLimit)
-    // } else {
+    if max < ENCAPSULATION_HEADER_SIZE {
+        Err(Error::SizeLimit)
+    } else {
         size::calc_serialized_data_size_bounded(value, max)
-            .map(|size| size/* + ENCAPSULATION_HEADER_SIZE*/)
-    // }
+            .map(|size| size + ENCAPSULATION_HEADER_SIZE)
+    }
 }
 
 /// Serializes a serializable object into a `Vec` of bytes with the encapsulation.
-pub fn serialize<T: ?Sized, S>(value: &T, size_limit: S, representation_format: RepresentationFormat) -> Result<Vec<u8>>
+pub fn serialize<T: ?Sized, S>(value: &T, representation_format: RepresentationFormat, size_limit: S) -> Result<Vec<u8>>
 where
     T: serde::Serialize,
     S: SizeLimit,
@@ -102,12 +138,12 @@ where
         }
     };
 
-    serialize_into::<_, _, _>(&mut writer, value, Infinite, representation_format)?;
+    serialize_into(&mut writer, value, representation_format, Infinite)?;
     Ok(writer)
 }
 
 /// Serializes an object directly into a `Write` with the encapsulation.
-pub fn serialize_into<W, T: ?Sized, S>(writer: W, value: &T, size_limit: S, representation_format: RepresentationFormat) -> Result<()>
+pub fn serialize_into<W, T: ?Sized, S>(writer: W, value: &T, representation_format: RepresentationFormat, size_limit: S) -> Result<()>
 where
     W: Write,
     T: serde::ser::Serialize,
@@ -117,41 +153,43 @@ where
         calc_serialized_size_bounded(value, limit)?;
     }
 
-    let mut serializer = Serializer::<_>::new(writer, representation_format);
+    // Header is always serialized as BigEndian
+    let mut serializer = Serializer::<_>::new(writer, &RepresentationFormat::CdrBe);
+    serde::Serialize::serialize(&representation_format.id(), &mut serializer)?;
+    serde::Serialize::serialize(&representation_format.option(), &mut serializer)?;
 
-    // serde::Serialize::serialize(&C::id(), &mut serializer)?;
-    // serde::Serialize::serialize(&C::option(), &mut serializer)?;
+    serializer.set_representation_format(&representation_format);
+
     serializer.reset_pos();
     serde::Serialize::serialize(value, &mut serializer)
 }
 
-// /// Deserializes a slice of bytes into an object.
-// pub fn deserialize<'de, T>(bytes: &[u8]) -> Result<T>
-// where
-//     T: serde::Deserialize<'de>,
-// {
-//     deserialize_from::<_, _, _>(bytes, Infinite)
-// }
+/// Deserializes a slice of bytes into an object.
+pub fn deserialize<'de, T>(bytes: &[u8]) -> Result<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    deserialize_from::<_, _, _>(bytes, Infinite)
+}
 
-// /// Deserializes an object directly from a `Read`.
-// pub fn deserialize_from<'de, R, T, S>(reader: R, size_limit: S) -> Result<T>
-// where
-//     R: Read,
-//     T: serde::Deserialize<'de>,
-//     S: SizeLimit,
-// {
-//     use crate::encapsulation::ENCAPSULATION_HEADER_SIZE;
+/// Deserializes an object directly from a `Read`.
+pub fn deserialize_from<'de, R, T, S>(reader: R, size_limit: S) -> Result<T>
+where
+    R: Read,
+    T: serde::Deserialize<'de>,
+    S: SizeLimit,
+{
+    // Create a deserializer to process the header
+    let mut deserializer = Deserializer::new(reader, &RepresentationFormat::CdrBe, size_limit);
 
-//     let mut deserializer = Deserializer::<_, S, BigEndian>::new(reader, size_limit);
+    let v: [u8; ENCAPSULATION_HEADER_SIZE] =
+        serde::Deserialize::deserialize(&mut deserializer)?;
 
-//     let v: [u8; ENCAPSULATION_HEADER_SIZE as usize] =
-//         serde::Deserialize::deserialize(&mut deserializer)?;
-//     deserializer.reset_pos();
-//     match v[1] {
-//         0 | 2 => serde::Deserialize::deserialize(&mut deserializer),
-//         1 | 3 => serde::Deserialize::deserialize(
-//             &mut Into::<Deserializer<_, _, LittleEndian>>::into(deserializer),
-//         ),
-//         _ => Err(Error::InvalidEncapsulation),
-//     }
-// }
+    // Set the representation format based on the header
+    deserializer.set_representation_format(&RepresentationFormat::try_from(v)?);
+
+    // Deserialize the rest of the data
+    deserializer.reset_pos();
+    serde::Deserialize::deserialize(&mut deserializer)
+    
+}
