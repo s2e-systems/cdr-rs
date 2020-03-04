@@ -2,7 +2,6 @@
 
 use serde::ser;
 use std::{self, io::Write};
-
 use crate::error::{Error, Result};
 use crate::size::{
     calc_serialized_data_size, calc_serialized_data_size_bounded, Infinite, SizeLimit,
@@ -13,7 +12,7 @@ use crate::{Endianness, RepresentationFormat, ENDIANNESS_BIT_MASK};
 /// A serializer that writes values into a buffer.
 pub struct Serializer<W> {
     writer: W,
-    pos: u64,
+    pos: usize,
     endianness: Endianness,
 }
 
@@ -35,7 +34,7 @@ where
         }
     }
 
-    fn add_pos(&mut self, size: u64) {
+    fn add_pos(&mut self, size: usize) {
         self.pos += size;
     }
 
@@ -45,7 +44,7 @@ where
 
     fn set_pos_of<T>(&mut self) -> Result<()> {
         self.write_padding_of::<T>()?;
-        self.add_pos(std::mem::size_of::<T>() as u64);
+        self.add_pos(std::mem::size_of::<T>());
         Ok(())
     }
 
@@ -53,15 +52,22 @@ where
         // Calculate the required padding to align with 1-byte, 2-byte, 4-byte, 8-byte boundaries
         // Instead of using the slow modulo operation '%', the faster bit-masking is used
         const PADDING: [u8; 8] = [0; 8];
-        let alignment = std::mem::size_of::<T>();
-        let rem_mask = alignment - 1; // mask like 0x0, 0x1, 0x3, 0x7
-        match (self.pos as usize) & rem_mask {
+        
+        match self.padding_length(self.pos, std::mem::size_of::<T>()) {
             0 => Ok(()),
-            n @ 1..=7 => {
-                let amt = alignment - n;
-                self.pos += amt as u64;
+            amt @ 1..=7 => {
+                self.pos += amt;
                 self.writer.write_all(&PADDING[..amt]).map_err(Into::into)
             }
+            _ => unreachable!(),
+        }
+    }
+
+    fn padding_length(&self, pos: usize, alignment: usize) -> usize{
+        let rem_mask = alignment - 1; // mask like 0x0, 0x1, 0x3, 0x7
+        match pos & rem_mask {
+            0 => 0,
+            n @ 1..=7 => alignment - n,
             _ => unreachable!(),
         }
     }
@@ -72,6 +78,14 @@ where
         }
 
         ser::Serializer::serialize_u32(self, v as u32)
+    }
+
+    fn write_usize_as_u16(&mut self, size: usize) -> Result<()> {
+        if size > std::u16::MAX as usize {
+            return Err(Error::NumberOutOfRange);
+        }
+
+        ser::Serializer::serialize_u16(self, size as u16)
     }
 }
 
@@ -189,7 +203,7 @@ where
         } else {
             let mut buf = [0u8; 1];
             v.encode_utf8(&mut buf);
-            self.add_pos(width as u64);
+            self.add_pos(width);
             self.writer.write_all(&buf[..width]).map_err(Into::into)
         }
     }
@@ -198,7 +212,7 @@ where
         let terminating_char = [0u8];
         let l = v.len() + terminating_char.len();
         self.write_usize_as_u32(l)?;
-        self.add_pos(l as u64);
+        self.add_pos(l);
         self.writer.write_all(v.as_bytes())?;
         self.writer.write_all(&terminating_char).map_err(Into::into)
     }
@@ -206,19 +220,19 @@ where
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
         let l = v.len();
         self.write_usize_as_u32(l)?;
-        self.add_pos(l as u64);
+        self.add_pos(l);
         self.writer.write_all(v).map_err(Into::into)
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
-        Ok(())
+        Err(Error::TypeNotSupported)
     }
 
     fn serialize_some<T: ?Sized>(self, v: &T) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        v.serialize(self)
+        Err(Error::TypeNotSupported)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok> {
@@ -288,7 +302,7 @@ where
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        Err(Error::TypeNotSupported)
+        Ok(Compound { ser: self })
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
@@ -420,7 +434,11 @@ where
     where
         T: ser::Serialize,
     {
-        value.serialize(&mut *self.ser)
+        let value_length = calc_serialized_data_size(value) as u16;
+        let padding_length = self.ser.padding_length(value_length as usize, 4) as u16;
+        ser::Serializer::serialize_u16(&mut *self.ser, value_length+padding_length)?;
+        value.serialize(&mut *self.ser)?;
+        self.ser.write_padding_of::<u32>()
     }
 
     #[inline]
@@ -519,6 +537,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use serde_derive::Serialize;
 
     #[test]
     fn serialize_octet() {
@@ -665,7 +685,7 @@ mod tests {
 
     #[test]
     fn serialize_string() {
-        let v = "Hola a todos, esto es un test";
+        let v = String::from("Hola a todos, esto es un test");
         assert_eq!(
             serialize_data(&v, RepresentationFormat::CdrBe, Infinite).unwrap(),
             vec![
@@ -1173,7 +1193,7 @@ mod tests {
             18446744073709551604,
         ];
         assert_eq!(
-            serialize_data(&v, RepresentationFormat::CdrLe, Infinite).unwrap(),
+            serialize_data(&v, RepresentationFormat::CdrBe, Infinite).unwrap(),
             vec![
                 0x00, 0x00, 0x00, 0x05, //
                 0x00, 0x00, 0x00, 0x00, //
@@ -1351,6 +1371,147 @@ mod tests {
                 0x42, 0x59, 0x45, 0x00, //
                 0x08, 0x00, 0x00, 0x00, //
                 0x47, 0x4f, 0x4f, 0x44, 0x42, 0x59, 0x45, 0x00,
+            ]
+        );
+    }
+
+    use std::hash::{BuildHasher, Hasher};
+
+    struct SimpleBuildHasher {}
+    struct SimpleHasher {
+        key: u64
+    }
+
+    impl Hasher for SimpleHasher {
+        fn finish(&self) -> u64 {
+            self.key
+        }
+
+        fn write(&mut self, _bytes: &[u8]) {
+        }
+    }
+
+    impl BuildHasher for SimpleBuildHasher {
+        type Hasher = SimpleHasher;
+
+        fn build_hasher(&self) -> Self::Hasher {
+            SimpleHasher{ key: 0}
+        }
+
+    }
+
+    #[test]
+    fn serialize_map_key_u16_value_u32() {
+        let mut map = HashMap::with_hasher(SimpleBuildHasher{}); // Use the custom hasher to avoid reordering of the elements
+        map.insert(10u16, 1000u32);
+        map.insert(11u16, 100u32);
+        map.insert(55u16, 1u32);
+
+        assert_eq!(
+            serialize_data(&map, RepresentationFormat::CdrBe, Infinite).unwrap(),
+            vec![
+                0x00, 0x0A, 0x00, 0x04, //
+                0x00, 0x00, 0x03, 0xE8, //
+                0x00, 0x0B, 0x00, 0x04, // 
+                0x00, 0x00, 0x00, 0x64, //
+                0x00, 0x37, 0x00, 0x04, //
+                0x00, 0x00, 0x00, 0x01, //
+            ]
+        );
+
+        assert_eq!(
+            serialize_data(&map, RepresentationFormat::CdrLe, Infinite).unwrap(),
+            vec![
+                0x0A, 0x00, 0x04, 0x00, //
+                0xE8, 0x03, 0x00, 0x00, //
+                0x0B, 0x00, 0x04, 0x00, // 
+                0x64, 0x00, 0x00, 0x00, //
+                0x37, 0x00, 0x04, 0x00, //
+                0x01, 0x00, 0x00, 0x00, //
+            ]
+        );
+    }
+
+    #[test]
+    fn serialize_map_key_u16_value_string() {
+        let mut map = HashMap::with_hasher(SimpleBuildHasher{});
+        map.insert(10u16, "Hello");
+        map.insert(11u16, "Hola");
+        map.insert(55u16, "Ola");
+
+        assert_eq!(
+            serialize_data(&map, RepresentationFormat::CdrBe, Infinite).unwrap(),
+            vec![
+                0x00, 0x0A, 0x00, 0x0C, //
+                0x00, 0x00, 0x00, 0x06, //
+                0x48, 0x65, 0x6C, 0x6C, //
+                0x6F, 0x00, 0x00, 0x00, //
+                0x00, 0x0B, 0x00, 0x0C, // 
+                0x00, 0x00, 0x00, 0x05, //
+                0x48, 0x6F, 0x6C, 0x61, //
+                0x00, 0x00, 0x00, 0x00, //
+                0x00, 0x37, 0x00, 0x08, //
+                0x00, 0x00, 0x00, 0x04, //
+                0x4F, 0x6C, 0x61, 0x00, //
+            ]
+        );
+
+        assert_eq!(
+            serialize_data(&map, RepresentationFormat::CdrLe, Infinite).unwrap(),
+            vec![
+                0x0A, 0x00, 0x0C, 0x00, //
+                0x06, 0x00, 0x00, 0x00, //
+                0x48, 0x65, 0x6C, 0x6C, //
+                0x6F, 0x00, 0x00, 0x00, //
+                0x0B, 0x00, 0x0C, 0x00, // 
+                0x05, 0x00, 0x00, 0x00, //
+                0x48, 0x6F, 0x6C, 0x61, //
+                0x00, 0x00, 0x00, 0x00, //
+                0x37, 0x00, 0x08, 0x00, //
+                0x04, 0x00, 0x00, 0x00, //
+                0x4F, 0x6C, 0x61, 0x00, //
+            ]
+        );
+    }
+
+    #[test]
+    fn serialize_map_key_u16_value_enumerated_types() {
+
+        #[derive(Serialize)]
+        enum MyValues {
+            Text(String),
+            Int32(u32),
+            Uint16(u16),
+        }
+        
+        let mut map = HashMap::with_hasher(SimpleBuildHasher{});
+        map.insert(10u16, MyValues::Text(String::from("Ola")));
+        map.insert(11u16, MyValues::Int32(2020));
+        map.insert(55u16, MyValues::Uint16(8));
+
+        assert_eq!(
+            serialize_data(&map, RepresentationFormat::CdrBe, Infinite).unwrap(),
+            vec![
+                0x00, 0x0A, 0x00, 0x08, //
+                0x00, 0x00, 0x00, 0x04, //
+                0x4F, 0x6C, 0x61, 0x00, //
+                0x00, 0x0B, 0x00, 0x04, //
+                0x00, 0x00, 0x07, 0xE4, //
+                0x00, 0x37, 0x00, 0x04, //
+                0x00, 0x08, 0x00, 0x00, //
+            ]
+        );
+
+        assert_eq!(
+            serialize_data(&map, RepresentationFormat::CdrLe, Infinite).unwrap(),
+            vec![
+                0x0A, 0x00, 0x08, 0x00, //
+                0x04, 0x00, 0x00, 0x00, //
+                0x4F, 0x6C, 0x61, 0x00, //
+                0x0B, 0x00, 0x04, 0x00, //
+                0xE4, 0x07, 0x00, 0x00, //
+                0x37, 0x00, 0x04, 0x00, //
+                0x08, 0x00, 0x00, 0x00, //
             ]
         );
     }

@@ -62,7 +62,7 @@ enum Endianness {
 const ENDIANNESS_BIT_MASK : u16 = 0x0001;
 
 /// Returns the size that an object would be if serialized with a encapsulation.
-pub fn calc_serialized_size<T: ?Sized>(value: &T) -> u64
+pub fn calc_serialized_size<T: ?Sized>(value: &T) -> usize
 where
     T: serde::Serialize,
 {
@@ -71,7 +71,7 @@ where
 
 /// Given a maximum size limit, check how large an object would be if it were
 /// to be serialized with a encapsulation.
-pub fn calc_serialized_size_bounded<T: ?Sized>(value: &T, max: u64) -> Result<u64>
+pub fn calc_serialized_size_bounded<T: ?Sized>(value: &T, max: usize) -> Result<usize>
 where
     T: serde::Serialize,
 {

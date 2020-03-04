@@ -8,18 +8,18 @@ use crate::error::{Error, Result};
 
 /// Limits on the number of bytes that can be read or written.
 pub trait SizeLimit {
-    fn add(&mut self, n: u64) -> Result<()>;
-    fn limit(&self) -> Option<u64>;
+    fn add(&mut self, n: usize) -> Result<()>;
+    fn limit(&self) -> Option<usize>;
 }
 
 /// A `SizeLimit` that restricts serialized or deserialized messages so that
 /// they do not exceed a certain byte length.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct Bounded(pub u64);
+pub struct Bounded(pub usize);
 
 impl SizeLimit for Bounded {
     #[inline]
-    fn add(&mut self, n: u64) -> Result<()> {
+    fn add(&mut self, n: usize) -> Result<()> {
         if self.0 >= n {
             self.0 -= n;
             Ok(())
@@ -29,7 +29,7 @@ impl SizeLimit for Bounded {
     }
 
     #[inline]
-    fn limit(&self) -> Option<u64> {
+    fn limit(&self) -> Option<usize> {
         Some(self.0)
     }
 }
@@ -40,23 +40,23 @@ pub struct Infinite;
 
 impl SizeLimit for Infinite {
     #[inline]
-    fn add(&mut self, _n: u64) -> Result<()> {
+    fn add(&mut self, _n: usize) -> Result<()> {
         Ok(())
     }
 
     #[inline]
-    fn limit(&self) -> Option<u64> {
+    fn limit(&self) -> Option<usize> {
         None
     }
 }
 
 struct Counter {
-    total: u64,
-    limit: Option<u64>,
+    total: usize,
+    limit: Option<usize>,
 }
 
 impl SizeLimit for Counter {
-    fn add(&mut self, n: u64) -> Result<()> {
+    fn add(&mut self, n: usize) -> Result<()> {
         self.total += n;
         if let Some(limit) = self.limit {
             if self.total > limit {
@@ -66,7 +66,7 @@ impl SizeLimit for Counter {
         Ok(())
     }
 
-    fn limit(&self) -> Option<u64> {
+    fn limit(&self) -> Option<usize> {
         unreachable!();
     }
 }
@@ -87,13 +87,13 @@ where
             0 => Ok(()),
             n @ 1..=7 => {
                 let amt = alignment - n;
-                self.add_size(amt as u64)
+                self.add_size(amt)
             }
             _ => unreachable!(),
         }
     }
 
-    fn add_size(&mut self, size: u64) -> Result<()> {
+    fn add_size(&mut self, size: usize) -> Result<()> {
         self.pos += size as usize;
         self.counter.add(size)
     }
@@ -108,7 +108,7 @@ where
 
     fn add_value<T>(&mut self, _v: T) -> Result<()> {
         self.add_padding_of::<T>()?;
-        self.add_size(std::mem::size_of::<T>() as u64)
+        self.add_size(std::mem::size_of::<T>())
     }
 }
 
@@ -171,17 +171,17 @@ where
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok> {
-        self.add_size(v.len_utf8() as u64)
+        self.add_size(v.len_utf8())
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
         self.add_value(0 as u32)?;
-        self.add_size(v.len() as u64 + 1) // adds the length 1 of a terminating character
+        self.add_size(v.len() + 1) // adds the length 1 of a terminating character
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok> {
         self.add_value(0 as u32)?;
-        self.add_size(v.len() as u64)
+        self.add_size(v.len())
     }
 
     fn serialize_none(self) -> Result<Self::Ok> {
@@ -223,14 +223,14 @@ where
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        self.serialize_u32(variant_index)?;
+        // self.serialize_u32(variant_index)?;
         value.serialize(self)
     }
 
@@ -448,7 +448,7 @@ where
 }
 
 /// Returns the size that an object would be if serialized.
-pub fn calc_serialized_data_size<T: ?Sized>(value: &T) -> u64
+pub fn calc_serialized_data_size<T: ?Sized>(value: &T) -> usize
 where
     T: ser::Serialize,
 {
@@ -466,7 +466,7 @@ where
 
 /// Given a maximum size limit, check how large an object would be if it were
 /// to be serialized.
-pub fn calc_serialized_data_size_bounded<T: ?Sized>(value: &T, max: u64) -> Result<u64>
+pub fn calc_serialized_data_size_bounded<T: ?Sized>(value: &T, max: usize) -> Result<usize>
 where
     T: ser::Serialize,
 {
