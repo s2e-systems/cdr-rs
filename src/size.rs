@@ -223,14 +223,13 @@ where
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        self.serialize_u32(variant_index)?;
         value.serialize(self)
     }
 
@@ -255,11 +254,10 @@ where
     fn serialize_tuple_variant(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        self.serialize_u32(variant_index)?;
         Ok(SizeCompound { ser: self })
     }
 
@@ -274,11 +272,10 @@ where
     fn serialize_struct_variant(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        self.serialize_u32(variant_index)?;
         Ok(SizeCompound { ser: self })
     }
 

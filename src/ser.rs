@@ -49,7 +49,6 @@ where
         // Instead of using the slow modulo operation '%', the faster bit-masking is used
         const PADDING: [u8; 8] = [0; 8];
         let alignment = std::mem::size_of::<T>();
-       
         match self.padding_length(self.pos, alignment) {
             0 => Ok(()),
             amt @ 1..=7 => {
@@ -216,14 +215,13 @@ where
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        self.serialize_u32(variant_index)?;
         value.serialize(self)
     }
 
@@ -248,16 +246,15 @@ where
     fn serialize_tuple_variant(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant> {
-        self.serialize_u32(variant_index)?;
         Ok(Compound { ser: self })
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
-        Ok(Compound {ser: self})
+        Ok(Compound { ser: self })
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
@@ -267,11 +264,10 @@ where
     fn serialize_struct_variant(
         self,
         _name: &'static str,
-        variant_index: u32,
+        _variant_index: u32,
         _variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant> {
-        self.serialize_u32(variant_index)?;
         Ok(Compound { ser: self })
     }
 
@@ -396,7 +392,7 @@ where
     {
         let value_length = calc_serialized_data_size(value) as u16;
         let padding_length = self.ser.padding_length(value_length as u64, 4) as u16;
-        ser::Serializer::serialize_u16(&mut *self.ser, value_length+padding_length)?;
+        ser::Serializer::serialize_u16(&mut *self.ser, value_length + padding_length)?;
         value.serialize(&mut *self.ser)?;
         self.ser.write_padding_of::<u32>()
     }
@@ -493,6 +489,7 @@ where
 mod tests {
     use super::*;
     use byteorder::{BigEndian, LittleEndian};
+    use serde_derive::{Serialize};
 
     #[test]
     fn serialize_octet() {
@@ -1331,12 +1328,12 @@ mod tests {
 
     // Implement a custom hasher to prevent the tests using hashmap
     // from failing due to reordering of the map elements
-    use std::collections::{HashMap};
+    use std::collections::HashMap;
     use std::hash::{BuildHasher, Hasher};
 
     struct SimpleBuildHasher {}
     struct SimpleHasher {
-        key: u64
+        key: u64,
     }
 
     impl Hasher for SimpleHasher {
@@ -1344,22 +1341,20 @@ mod tests {
             self.key
         }
 
-        fn write(&mut self, _bytes: &[u8]) {
-        }
+        fn write(&mut self, _bytes: &[u8]) {}
     }
 
     impl BuildHasher for SimpleBuildHasher {
         type Hasher = SimpleHasher;
 
         fn build_hasher(&self) -> Self::Hasher {
-            SimpleHasher{ key: 0}
+            SimpleHasher { key: 0 }
         }
-
     }
 
     #[test]
     fn serialize_map_key_u16_value_u32() {
-        let mut map = HashMap::with_hasher(SimpleBuildHasher{}); // Use the custom hasher to avoid reordering of the elements
+        let mut map = HashMap::with_hasher(SimpleBuildHasher {}); // Use the custom hasher to avoid reordering of the elements
         map.insert(10u16, 1000u32);
         map.insert(11u16, 100u32);
         map.insert(55u16, 1u32);
@@ -1369,7 +1364,7 @@ mod tests {
             vec![
                 0x00, 0x0A, 0x00, 0x04, //
                 0x00, 0x00, 0x03, 0xE8, //
-                0x00, 0x0B, 0x00, 0x04, // 
+                0x00, 0x0B, 0x00, 0x04, //
                 0x00, 0x00, 0x00, 0x64, //
                 0x00, 0x37, 0x00, 0x04, //
                 0x00, 0x00, 0x00, 0x01, //
@@ -1381,7 +1376,7 @@ mod tests {
             vec![
                 0x0A, 0x00, 0x04, 0x00, //
                 0xE8, 0x03, 0x00, 0x00, //
-                0x0B, 0x00, 0x04, 0x00, // 
+                0x0B, 0x00, 0x04, 0x00, //
                 0x64, 0x00, 0x00, 0x00, //
                 0x37, 0x00, 0x04, 0x00, //
                 0x01, 0x00, 0x00, 0x00, //
@@ -1391,7 +1386,7 @@ mod tests {
 
     #[test]
     fn serialize_map_key_u16_value_string() {
-        let mut map = HashMap::with_hasher(SimpleBuildHasher{});
+        let mut map = HashMap::with_hasher(SimpleBuildHasher {});
         map.insert(10u16, "Hello");
         map.insert(11u16, "Hola");
         map.insert(55u16, "Ola");
@@ -1403,7 +1398,7 @@ mod tests {
                 0x00, 0x00, 0x00, 0x06, //
                 0x48, 0x65, 0x6C, 0x6C, //
                 0x6F, 0x00, 0x00, 0x00, //
-                0x00, 0x0B, 0x00, 0x0C, // 
+                0x00, 0x0B, 0x00, 0x0C, //
                 0x00, 0x00, 0x00, 0x05, //
                 0x48, 0x6F, 0x6C, 0x61, //
                 0x00, 0x00, 0x00, 0x00, //
@@ -1420,7 +1415,7 @@ mod tests {
                 0x06, 0x00, 0x00, 0x00, //
                 0x48, 0x65, 0x6C, 0x6C, //
                 0x6F, 0x00, 0x00, 0x00, //
-                0x0B, 0x00, 0x0C, 0x00, // 
+                0x0B, 0x00, 0x0C, 0x00, //
                 0x05, 0x00, 0x00, 0x00, //
                 0x48, 0x6F, 0x6C, 0x61, //
                 0x00, 0x00, 0x00, 0x00, //
@@ -1431,5 +1426,44 @@ mod tests {
         );
     }
 
-    
+    #[test]
+    fn serialize_map_key_u16_value_enumerated_types() {
+        #[derive(Serialize)]
+        enum MyValues {
+            Text(String),
+            Int32(u32),
+            Uint16(u16),
+        }
+
+        let mut map = HashMap::with_hasher(SimpleBuildHasher {});
+        map.insert(10u16, MyValues::Text(String::from("Ola")));
+        map.insert(11u16, MyValues::Int32(2020));
+        map.insert(55u16, MyValues::Uint16(8));
+
+        assert_eq!(
+            serialize_data::<_, _, BigEndian>(&map, Infinite).unwrap(),
+            vec![
+                0x00, 0x0A, 0x00, 0x08, //
+                0x00, 0x00, 0x00, 0x04, //
+                0x4F, 0x6C, 0x61, 0x00, //
+                0x00, 0x0B, 0x00, 0x04, //
+                0x00, 0x00, 0x07, 0xE4, //
+                0x00, 0x37, 0x00, 0x04, //
+                0x00, 0x08, 0x00, 0x00, //
+            ]
+        );
+
+        assert_eq!(
+            serialize_data::<_, _, LittleEndian>(&map, Infinite).unwrap(),
+            vec![
+                0x0A, 0x00, 0x08, 0x00, //
+                0x04, 0x00, 0x00, 0x00, //
+                0x4F, 0x6C, 0x61, 0x00, //
+                0x0B, 0x00, 0x04, 0x00, //
+                0xE4, 0x07, 0x00, 0x00, //
+                0x37, 0x00, 0x04, 0x00, //
+                0x08, 0x00, 0x00, 0x00, //
+            ]
+        );
+    }
 }
