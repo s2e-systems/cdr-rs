@@ -752,35 +752,6 @@ fn test_enum() {
 }
 
 #[test]
-fn test_union() {
-    #[derive(Serialize, Deserialize, PartialEq, Debug)]
-    enum U {
-        A(u32),
-        B(i16, u32, u64),
-        C {
-            c: char,
-            n: u32,
-            b: bool,
-            v: Vec<u8>,
-        },
-        D,
-    }
-
-    check(U::A(3), Some(4 + 4));
-    check(U::B(1, 2, 3), Some(4 + 2 + 2 + 4 + 4 + 8));
-    check(
-        U::C {
-            c: 'a',
-            n: 5,
-            b: true,
-            v: vec![1, 1, 2, 3, 5],
-        },
-        Some(4 + 1 + 3 + 4 + 1 + 3 + 4 + 5),
-    );
-    check(U::D, Some(4));
-}
-
-#[test]
 fn test_unsupported() {
     use std::collections::{BTreeMap, HashMap};
 

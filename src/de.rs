@@ -415,25 +415,25 @@ where
         Ok(())
     }
 
-    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value>
+    fn newtype_variant_seed<T>(self, _seed: T) -> Result<T::Value>
     where
         T: de::DeserializeSeed<'de>,
     {
-        de::DeserializeSeed::deserialize(seed, self)
+        Err(Error::TypeNotSupported)
     }
 
-    fn tuple_variant<V>(self, len: usize, visitor: V) -> Result<V::Value>
+    fn tuple_variant<V>(self, _len: usize, _visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        de::Deserializer::deserialize_tuple(self, len, visitor)
+        Err(Error::TypeNotSupported)
     }
 
-    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> Result<V::Value>
+    fn struct_variant<V>(self, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        de::Deserializer::deserialize_tuple(self, fields.len(), visitor)
+        Err(Error::TypeNotSupported)
     }
 }
 
