@@ -50,24 +50,24 @@ fn compose_lidar_points_msg() -> LidarPointsMsg {
 
 #[bench]
 fn lidar_point_msg(b: &mut Bencher) {
-    use cdr::{self, CdrBe, Infinite};
+    use cdr::{self, RepresentationFormat, Infinite};
 
     let msg = compose_lidar_points_msg();
     b.iter(|| {
-        let encoded = cdr::serialize::<_, _, CdrBe>(&msg, Infinite).unwrap();
+        let encoded = cdr::serialize(&msg, RepresentationFormat::CdrBe, Infinite).unwrap();
         let _decoded = cdr::deserialize::<LidarPointsMsg>(&encoded[..]).unwrap();
     });
 }
 
 #[bench]
 fn lidar_point_msg_without_encapsulation(b: &mut Bencher) {
-    use cdr::{self, BigEndian, Infinite};
+    use cdr::{self, RepresentationFormat, Infinite};
 
     let msg = compose_lidar_points_msg();
     b.iter(|| {
-        let encoded = cdr::ser::serialize_data::<_, _, BigEndian>(&msg, Infinite).unwrap();
+        let encoded = cdr::ser::serialize_data(&msg, RepresentationFormat::CdrBe, Infinite).unwrap();
         let _decoded =
-            cdr::de::deserialize_data::<LidarPointsMsg, BigEndian>(&encoded[..]).unwrap();
+            cdr::de::deserialize_data::<LidarPointsMsg>(&encoded[..], RepresentationFormat::CdrBe).unwrap();
     });
 }
 
@@ -128,22 +128,22 @@ That fought with us upon Saint Crispin's day.
 
 #[bench]
 fn string_msg(b: &mut Bencher) {
-    use cdr::{self, CdrBe, Infinite};
+    use cdr::{self, RepresentationFormat, Infinite};
 
     let msg = compose_string_msg();
     b.iter(|| {
-        let encoded = cdr::serialize::<_, _, CdrBe>(&msg, Infinite).unwrap();
+        let encoded = cdr::serialize(&msg, RepresentationFormat::CdrBe, Infinite).unwrap();
         let _decoded = cdr::deserialize::<String>(&encoded[..]).unwrap();
     });
 }
 
 #[bench]
 fn string_msg_without_encapsulation(b: &mut Bencher) {
-    use cdr::{self, BigEndian, Infinite};
+    use cdr::{self, RepresentationFormat, Infinite};
 
     let msg = compose_string_msg();
     b.iter(|| {
-        let encoded = cdr::ser::serialize_data::<_, _, BigEndian>(&msg, Infinite).unwrap();
-        let _decoded = cdr::de::deserialize_data::<String, BigEndian>(&encoded[..]).unwrap();
+        let encoded = cdr::ser::serialize_data(&msg, RepresentationFormat::CdrBe, Infinite).unwrap();
+        let _decoded = cdr::de::deserialize_data::<String>(&encoded[..], RepresentationFormat::CdrBe).unwrap();
     });
 }

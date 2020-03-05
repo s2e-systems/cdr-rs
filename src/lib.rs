@@ -154,7 +154,7 @@ where
     }
 
     // Header is always serialized as BigEndian
-    let mut serializer = Serializer::<_>::new(writer, &RepresentationFormat::CdrBe);
+    let mut serializer = Serializer::new(writer, &RepresentationFormat::CdrBe);
     serde::Serialize::serialize(&representation_format.id(), &mut serializer)?;
     serde::Serialize::serialize(&representation_format.option(), &mut serializer)?;
 
