@@ -1367,6 +1367,18 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_enum_variants(){
+        #[derive(Serialize)]
+        enum Simple{A=0x0010, B};
+
+        let v = [Simple::A, Simple::B];
+
+        assert_eq!(
+            serialize_data(&v, RepresentationFormat::CdrLe, Infinite).unwrap(),
+            vec![0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]);
+    }
+
     use std::hash::{BuildHasher, Hasher};
 
     struct SimpleBuildHasher {}
